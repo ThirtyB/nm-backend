@@ -46,3 +46,29 @@ class NodeMonitorMetrics(Base):
     net_tx_kbps = Column(Float)
     version = Column(Text)
     inserted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    rule_name = Column(String(100), nullable=False)
+    rule_type = Column(String(20), nullable=False)  # "global" 或 "specific"
+    target_ip = Column(String(45))  # 个例配置的目标IP，全局配置时为NULL
+    
+    # 规则条件配置
+    condition_field = Column(String(50), nullable=False)
+    condition_operator = Column(String(10), nullable=False)  # >, <, >=, <=, ==, !=
+    condition_value = Column(Float, nullable=False)
+    
+    # 时间条件（可选）
+    time_range_start = Column(BigInteger)
+    time_range_end = Column(BigInteger)
+    
+    # 告警级别和消息
+    alert_level = Column(String(20), default="warning")  # info, warning, error, critical
+    alert_message = Column(Text)
+    
+    # 状态管理
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True))

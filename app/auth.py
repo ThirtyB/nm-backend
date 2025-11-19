@@ -89,3 +89,13 @@ async def get_current_admin_user(current_user: User = Depends(get_current_user))
             detail="Not enough permissions"
         )
     return current_user
+
+# 便捷的管理员依赖
+async def get_admin_user(current_user: User = Depends(get_current_user)):
+    """获取管理员用户（用于权限控制）"""
+    if current_user.user_type != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
+    return current_user

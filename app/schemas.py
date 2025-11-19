@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime
 
 class UserBase(BaseModel):
@@ -104,3 +104,64 @@ class TimeRangeParams(BaseModel):
 
 class IPMetricsRequest(TimeRangeParams):
     ip: str = Field(..., description="IP地址")
+
+# 告警管理相关schemas
+class AlertRuleBase(BaseModel):
+    rule_name: str = Field(..., description="规则名称")
+    rule_type: Literal["global", "specific"] = Field(..., description="规则类型")
+    target_ip: Optional[str] = Field(None, description="目标IP（个例规则必填）")
+    condition_field: str = Field(..., description="监控字段")
+    condition_operator: Literal[">", "<", ">=", "<=", "==", "!="] = Field(..., description="比较操作符")
+    condition_value: float = Field(..., description="阈值")
+    time_range_start: Optional[int] = Field(None, description="时间范围开始")
+    time_range_end: Optional[int] = Field(None, description="时间范围结束")
+    alert_level: Literal["info", "warning", "error", "critical"] = Field("warning", description="告警级别")
+    alert_message: Optional[str] = Field(None, description="告警消息模板")
+    is_active: bool = Field(True, description="是否激活")
+
+class AlertRuleCreate(AlertRuleBase):
+    pass
+
+class AlertRuleUpdate(BaseModel):
+    rule_name: Optional[str] = None
+    rule_type: Optional[Literal["global", "specific"]] = None
+    target_ip: Optional[str] = None
+    condition_field: Optional[str] = None
+    condition_operator: Optional[Literal[">", "<", ">=", "<=", "==", "!="]] = None
+    condition_value: Optional[float] = None
+    time_range_start: Optional[int] = None
+    time_range_end: Optional[int] = None
+    alert_level: Optional[Literal["info", "warning", "error", "critical"]] = None
+    alert_message: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class AlertRuleResponse(AlertRuleBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class AlertInfo(BaseModel):
+    ip: str
+    rule_id: int
+    rule_name: str
+    alert_level: str
+    alert_message: str
+    current_value: float
+    threshold_value: float
+    condition_field: str
+    condition_operator: str
+    timestamp: int
+    rule_type: str  # "global" 或 "specific"
+
+class AlertsResponse(BaseModel):
+    alerts: List[AlertInfo]
+    total_count: int
+    query_time: datetime
+
+class AlertQueryParams(BaseModel):
+    ips: Optional[List[str]] = Field(None, description="指定IP列表，为空则查询所有IP")
+    alert_levels: Optional[List[Literal["info", "warning", "error", "critical"]]] = Field(None, description="告警级别过滤")
+    rule_types: Optional[List[Literal["global", "specific"]]] = Field(None, description="规则类型过滤")
