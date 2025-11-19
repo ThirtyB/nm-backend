@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from app.database import engine, Base
-from app.routers import auth, users, node_monitor, alert_management
+from app.routers import auth, users, node_monitor, alert_management, scoring
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,6 +28,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(node_monitor.router)
 app.include_router(alert_management.router)
+app.include_router(scoring.router)
 
 @app.get("/")
 async def root():

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Dict
 from datetime import datetime
 
 class UserBase(BaseModel):
@@ -165,3 +165,31 @@ class AlertQueryParams(BaseModel):
     ips: Optional[List[str]] = Field(None, description="指定IP列表，为空则查询所有IP")
     alert_levels: Optional[List[Literal["info", "warning", "error", "critical"]]] = Field(None, description="告警级别过滤")
     rule_types: Optional[List[Literal["global", "specific"]]] = Field(None, description="规则类型过滤")
+
+# 评分系统相关schemas
+class DimensionScore(BaseModel):
+    """维度分数"""
+    name: str = Field(..., description="维度名称")
+    score: float = Field(..., description="分数(0-100)")
+    alert_count: int = Field(..., description="告警数量")
+    deductions: List[dict] = Field(..., description="扣分详情")
+
+class MachineScore(BaseModel):
+    """机器评分"""
+    ip: str = Field(..., description="IP地址")
+    total_score: float = Field(..., description="总分(0-100)")
+    dimensions: Dict[str, DimensionScore] = Field(..., description="各维度分数")
+    evaluation_time: datetime = Field(..., description="评估时间")
+
+class ScoreQueryParams(BaseModel):
+    """评分查询参数"""
+    start_time: int = Field(..., description="开始时间戳")
+    end_time: int = Field(..., description="结束时间戳")
+    ips: Optional[List[str]] = Field(None, description="指定IP列表，为空则查询所有IP")
+    include_details: bool = Field(True, description="是否包含详细扣分信息")
+
+class ScoreResponse(BaseModel):
+    """评分响应"""
+    scores: List[MachineScore] = Field(..., description="机器评分列表")
+    total_count: int = Field(..., description="机器总数")
+    query_time: datetime = Field(..., description="查询时间")
