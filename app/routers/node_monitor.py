@@ -39,7 +39,18 @@ def calculate_network_rate(net_rx_kbps: Optional[float], net_tx_kbps: Optional[f
     """计算网络速率（总速率）"""
     if net_rx_kbps is None or net_tx_kbps is None:
         return None
-    return round(net_rx_kbps + net_tx_kbps, 2)
+    
+    # 处理负数情况：将负数视为0
+    rx_rate = max(0, net_rx_kbps) if net_rx_kbps is not None else 0
+    tx_rate = max(0, net_tx_kbps) if net_tx_kbps is not None else 0
+    
+    return round(rx_rate + tx_rate, 2)
+
+def clean_network_data(net_rx_kbps: Optional[float], net_tx_kbps: Optional[float]) -> tuple:
+    """清理网络数据，处理负数"""
+    clean_rx = max(0, net_rx_kbps) if net_rx_kbps is not None and net_rx_kbps >= 0 else 0
+    clean_tx = max(0, net_tx_kbps) if net_tx_kbps is not None and net_tx_kbps >= 0 else 0
+    return clean_rx, clean_tx
 
 @router.get("/active-ips", response_model=ActiveIPsResponse)
 async def get_active_ips(
@@ -155,7 +166,45 @@ async def get_ip_metrics(
         if not metrics:
             raise HTTPException(status_code=404, detail=f"IP {ip} 在指定时间段内没有监控数据")
         
-        return metrics
+        # 清理网络数据中的负数
+        cleaned_metrics = []
+        for metric in metrics:
+            clean_rx, clean_tx = clean_network_data(metric.net_rx_kbps, metric.net_tx_kbps)
+            # 创建新的对象，保持其他字段不变
+            cleaned_metric = NodeMetricsResponse(
+                id=metric.id,
+                ip=metric.ip,
+                ts=metric.ts,
+                cpu_usr=metric.cpu_usr,
+                cpu_sys=metric.cpu_sys,
+                cpu_iow=metric.cpu_iow,
+                mem_total=metric.mem_total,
+                mem_free=metric.mem_free,
+                mem_buff=metric.mem_buff,
+                mem_cache=metric.mem_cache,
+                swap_total=metric.swap_total,
+                swap_used=metric.swap_used,
+                swap_in=metric.swap_in,
+                swap_out=metric.swap_out,
+                system_in=metric.system_in,
+                system_cs=metric.system_cs,
+                disk_name=metric.disk_name,
+                disk_total=metric.disk_total,
+                disk_used=metric.disk_used,
+                disk_used_percent=metric.disk_used_percent,
+                disk_iops=metric.disk_iops,
+                disk_r=metric.disk_r,
+                disk_w=metric.disk_w,
+                net_rx_kbytes=metric.net_rx_kbytes,
+                net_tx_kbytes=metric.net_tx_kbytes,
+                net_rx_kbps=clean_rx,
+                net_tx_kbps=clean_tx,
+                version=metric.version,
+                inserted_at=metric.inserted_at
+            )
+            cleaned_metrics.append(cleaned_metric)
+        
+        return cleaned_metrics
         
     except HTTPException:
         raise
@@ -184,7 +233,45 @@ async def get_ip_metrics_with_body(
         if not metrics:
             raise HTTPException(status_code=404, detail=f"IP {request.ip} 在指定时间段内没有监控数据")
         
-        return metrics
+        # 清理网络数据中的负数
+        cleaned_metrics = []
+        for metric in metrics:
+            clean_rx, clean_tx = clean_network_data(metric.net_rx_kbps, metric.net_tx_kbps)
+            # 创建新的对象，保持其他字段不变
+            cleaned_metric = NodeMetricsResponse(
+                id=metric.id,
+                ip=metric.ip,
+                ts=metric.ts,
+                cpu_usr=metric.cpu_usr,
+                cpu_sys=metric.cpu_sys,
+                cpu_iow=metric.cpu_iow,
+                mem_total=metric.mem_total,
+                mem_free=metric.mem_free,
+                mem_buff=metric.mem_buff,
+                mem_cache=metric.mem_cache,
+                swap_total=metric.swap_total,
+                swap_used=metric.swap_used,
+                swap_in=metric.swap_in,
+                swap_out=metric.swap_out,
+                system_in=metric.system_in,
+                system_cs=metric.system_cs,
+                disk_name=metric.disk_name,
+                disk_total=metric.disk_total,
+                disk_used=metric.disk_used,
+                disk_used_percent=metric.disk_used_percent,
+                disk_iops=metric.disk_iops,
+                disk_r=metric.disk_r,
+                disk_w=metric.disk_w,
+                net_rx_kbytes=metric.net_rx_kbytes,
+                net_tx_kbytes=metric.net_tx_kbytes,
+                net_rx_kbps=clean_rx,
+                net_tx_kbps=clean_tx,
+                version=metric.version,
+                inserted_at=metric.inserted_at
+            )
+            cleaned_metrics.append(cleaned_metric)
+        
+        return cleaned_metrics
         
     except HTTPException:
         raise

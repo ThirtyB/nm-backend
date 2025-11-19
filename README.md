@@ -209,8 +209,10 @@ Swap使用率 = swap_used / swap_total * 100
 
 ### 网络速率
 ```
-网络速率 = net_rx_kbps + net_tx_kbps
+网络速率 = max(0, net_rx_kbps) + max(0, net_tx_kbps)
 ```
+
+**注意**: 网络数据中的负数会被自动处理为0。负数通常是由于网络计数器重置或时间戳问题导致的。
 
 ## 测试脚本
 
