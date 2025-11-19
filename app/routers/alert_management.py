@@ -398,7 +398,14 @@ async def create_alert_rule(
     - rule_name: 规则名称（必填，字符串，最大100字符）
     - rule_type: 规则类型（必填，"global"全局或"specific"个例）
     - target_ip: 目标IP（个例规则必填，全局规则必须为空）
-    - condition_field: 监控字段（必填，支持cpu_usage_rate, memory_usage_rate, disk_used_percent等）
+    - condition_field: 监控字段（必填，支持以下字段）
+      * 衍生指标：cpu_usage_rate, memory_usage_rate, swap_usage_rate, network_rate
+      * CPU相关：cpu_usr, cpu_sys, cpu_iow
+      * 内存相关：mem_total, mem_free, mem_buff, mem_cache
+      * Swap相关：swap_total, swap_used, swap_in, swap_out
+      * 磁盘相关：disk_used_percent, disk_iops, disk_r, disk_w, disk_total, disk_used
+      * 网络相关：net_rx_kbps, net_tx_kbps, net_rx_kbytes, net_tx_kbytes
+      * 系统相关：system_in, system_cs
     - condition_operator: 比较操作符（必填，支持>, <, >=, <=, ==, !=）
     - condition_value: 阈值（必填，浮点数）
     - time_range_start: 生效开始时间（可选，Unix时间戳）
