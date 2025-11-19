@@ -72,3 +72,12 @@ class AlertRule(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True))
+
+class ServiceHeartbeat(Base):
+    __tablename__ = "service_heartbeat"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String(45), nullable=False, index=True)
+    service_name = Column(String(100), nullable=False, index=True)
+    report_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
