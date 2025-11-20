@@ -193,3 +193,22 @@ class ScoreResponse(BaseModel):
     scores: List[MachineScore] = Field(..., description="机器评分列表")
     total_count: int = Field(..., description="机器总数")
     query_time: datetime = Field(..., description="查询时间")
+
+# CPU趋势图相关schemas
+class CPUTrendData(BaseModel):
+    """CPU趋势数据点"""
+    timestamp: int = Field(..., description="时间戳")
+    cpu_usage: float = Field(..., description="CPU使用率")
+
+class IPTrendData(BaseModel):
+    """IP趋势数据"""
+    ip: str = Field(..., description="IP地址")
+    trend_data: List[CPUTrendData] = Field(..., description="趋势数据列表")
+    average_cpu: float = Field(..., description="平均CPU使用率")
+    max_cpu: float = Field(..., description="最高CPU使用率")
+
+class CPUTrendResponse(BaseModel):
+    """CPU趋势响应"""
+    top_ips: List[IPTrendData] = Field(..., description="Top N IP的趋势数据")
+    query_time: datetime = Field(..., description="查询时间")
+    time_range: dict = Field(..., description="查询时间范围")

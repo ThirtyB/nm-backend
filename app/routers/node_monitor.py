@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from app.database import get_db
 from app.models import NodeMonitorMetrics
-from app.schemas import ActiveIPsResponse, NodeLatestMetrics, NodeMetricsResponse, IPMetricsRequest, TimeRangeParams
+from app.schemas import ActiveIPsResponse, NodeLatestMetrics, NodeMetricsResponse, IPMetricsRequest, TimeRangeParams, CPUTrendResponse, IPTrendData, CPUTrendData
 from app.auth import get_current_user, User
 
 router = APIRouter(
@@ -327,3 +327,275 @@ async def get_monitoring_summary(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取监控汇总信息失败: {str(e)}")
+
+@router.get("/cpu-trends/average", response_model=CPUTrendResponse)
+async def get_cpu_average_trends(
+    start_time: int = Query(..., description="开始时间戳"),
+    end_time: int = Query(..., description="结束时间戳"),
+    top_n: int = Query(5, ge=1, le=50, description="Top N 个IP"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取CPU平均用量Top N IP的趋势图数据
+    
+    查询参数：
+    - start_time: 开始时间戳（必填，Unix时间戳）
+    - end_time: 结束时间戳（必填，Unix时间戳）
+    - top_n: 返回Top N个IP（可选，默认5，范围1-50）
+    
+    返回参数：
+    - top_ips: Top N IP的趋势数据列表，每个IP包含：
+      - ip: IP地址
+      - trend_data: 趋势数据列表，每个数据点包含：
+        - timestamp: 时间戳
+        - cpu_usage: CPU使用率
+      - average_cpu: 平均CPU使用率
+      - max_cpu: 最高CPU使用率
+    - query_time: 查询时间
+    - time_range: 查询时间范围
+    
+    说明：
+    - 计算每个IP在指定时间段内的平均CPU使用率
+    - 返回平均CPU使用率最高的Top N个IP
+    - 包含每个IP的详细趋势数据
+    - CPU使用率 = cpu_usr + cpu_sys + cpu_iow
+    """
+    try:
+        # 首先计算每个IP的平均CPU使用率，获取Top N
+        top_ips_query = text("""
+            WITH cpu_usage_data AS (
+                SELECT 
+                    ip,
+                    ts,
+                    CASE 
+                        WHEN cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL 
+                        THEN ROUND((cpu_usr + cpu_sys + cpu_iow)::numeric, 2)
+                        ELSE NULL 
+                    END as cpu_usage
+                FROM node_monitor_metrics 
+                WHERE ts BETWEEN :start_time AND :end_time
+                AND cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL
+            ),
+            ip_averages AS (
+                SELECT 
+                    ip,
+                    AVG(cpu_usage) as avg_cpu,
+                    MAX(cpu_usage) as max_cpu,
+                    COUNT(*) as data_points
+                FROM cpu_usage_data
+                WHERE cpu_usage IS NOT NULL
+                GROUP BY ip
+                HAVING COUNT(*) > 0
+            )
+            SELECT ip, avg_cpu, max_cpu
+            FROM ip_averages
+            ORDER BY avg_cpu DESC
+            LIMIT :top_n
+        """)
+        
+        top_ips_result = db.execute(top_ips_query, {
+            "start_time": start_time,
+            "end_time": end_time,
+            "top_n": top_n
+        })
+        
+        top_ips_list = top_ips_result.fetchall()
+        
+        if not top_ips_list:
+            return CPUTrendResponse(
+                top_ips=[],
+                query_time=datetime.now(),
+                time_range={"start_time": start_time, "end_time": end_time}
+            )
+        
+        # 获取每个Top IP的详细趋势数据
+        trend_data_list = []
+        for ip_row in top_ips_list:
+            ip = ip_row[0]
+            avg_cpu = float(ip_row[1])
+            max_cpu = float(ip_row[2])
+            
+            # 获取该IP的详细趋势数据
+            trend_query = text("""
+                SELECT 
+                    ts,
+                    CASE 
+                        WHEN cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL 
+                        THEN ROUND((cpu_usr + cpu_sys + cpu_iow)::numeric, 2)
+                        ELSE NULL 
+                    END as cpu_usage
+                FROM node_monitor_metrics 
+                WHERE ip = :ip 
+                AND ts BETWEEN :start_time AND :end_time
+                AND cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL
+                ORDER BY ts ASC
+            """)
+            
+            trend_result = db.execute(trend_query, {
+                "ip": ip,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+            
+            trend_points = [
+                CPUTrendData(
+                    timestamp=row[0],
+                    cpu_usage=float(row[1])
+                )
+                for row in trend_result.fetchall()
+            ]
+            
+            ip_trend_data = IPTrendData(
+                ip=ip,
+                trend_data=trend_points,
+                average_cpu=avg_cpu,
+                max_cpu=max_cpu
+            )
+            
+            trend_data_list.append(ip_trend_data)
+        
+        return CPUTrendResponse(
+            top_ips=trend_data_list,
+            query_time=datetime.now(),
+            time_range={"start_time": start_time, "end_time": end_time}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取CPU平均趋势数据失败: {str(e)}")
+
+@router.get("/cpu-trends/maximum", response_model=CPUTrendResponse)
+async def get_cpu_maximum_trends(
+    start_time: int = Query(..., description="开始时间戳"),
+    end_time: int = Query(..., description="结束时间戳"),
+    top_n: int = Query(5, ge=1, le=50, description="Top N 个IP"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取CPU最高用量Top N IP的趋势图数据
+    
+    查询参数：
+    - start_time: 开始时间戳（必填，Unix时间戳）
+    - end_time: 结束时间戳（必填，Unix时间戳）
+    - top_n: 返回Top N个IP（可选，默认5，范围1-50）
+    
+    返回参数：
+    - top_ips: Top N IP的趋势数据列表，每个IP包含：
+      - ip: IP地址
+      - trend_data: 趋势数据列表，每个数据点包含：
+        - timestamp: 时间戳
+        - cpu_usage: CPU使用率
+      - average_cpu: 平均CPU使用率
+      - max_cpu: 最高CPU使用率
+    - query_time: 查询时间
+    - time_range: 查询时间范围
+    
+    说明：
+    - 计算每个IP在指定时间段内的最高CPU使用率
+    - 返回最高CPU使用率最高的Top N个IP
+    - 包含每个IP的详细趋势数据
+    - CPU使用率 = cpu_usr + cpu_sys + cpu_iow
+    """
+    try:
+        # 首先计算每个IP的最高CPU使用率，获取Top N
+        top_ips_query = text("""
+            WITH cpu_usage_data AS (
+                SELECT 
+                    ip,
+                    ts,
+                    CASE 
+                        WHEN cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL 
+                        THEN ROUND((cpu_usr + cpu_sys + cpu_iow)::numeric, 2)
+                        ELSE NULL 
+                    END as cpu_usage
+                FROM node_monitor_metrics 
+                WHERE ts BETWEEN :start_time AND :end_time
+                AND cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL
+            ),
+            ip_maximums AS (
+                SELECT 
+                    ip,
+                    AVG(cpu_usage) as avg_cpu,
+                    MAX(cpu_usage) as max_cpu,
+                    COUNT(*) as data_points
+                FROM cpu_usage_data
+                WHERE cpu_usage IS NOT NULL
+                GROUP BY ip
+                HAVING COUNT(*) > 0
+            )
+            SELECT ip, avg_cpu, max_cpu
+            FROM ip_maximums
+            ORDER BY max_cpu DESC
+            LIMIT :top_n
+        """)
+        
+        top_ips_result = db.execute(top_ips_query, {
+            "start_time": start_time,
+            "end_time": end_time,
+            "top_n": top_n
+        })
+        
+        top_ips_list = top_ips_result.fetchall()
+        
+        if not top_ips_list:
+            return CPUTrendResponse(
+                top_ips=[],
+                query_time=datetime.now(),
+                time_range={"start_time": start_time, "end_time": end_time}
+            )
+        
+        # 获取每个Top IP的详细趋势数据
+        trend_data_list = []
+        for ip_row in top_ips_list:
+            ip = ip_row[0]
+            avg_cpu = float(ip_row[1])
+            max_cpu = float(ip_row[2])
+            
+            # 获取该IP的详细趋势数据
+            trend_query = text("""
+                SELECT 
+                    ts,
+                    CASE 
+                        WHEN cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL 
+                        THEN ROUND((cpu_usr + cpu_sys + cpu_iow)::numeric, 2)
+                        ELSE NULL 
+                    END as cpu_usage
+                FROM node_monitor_metrics 
+                WHERE ip = :ip 
+                AND ts BETWEEN :start_time AND :end_time
+                AND cpu_usr IS NOT NULL AND cpu_sys IS NOT NULL AND cpu_iow IS NOT NULL
+                ORDER BY ts ASC
+            """)
+            
+            trend_result = db.execute(trend_query, {
+                "ip": ip,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+            
+            trend_points = [
+                CPUTrendData(
+                    timestamp=row[0],
+                    cpu_usage=float(row[1])
+                )
+                for row in trend_result.fetchall()
+            ]
+            
+            ip_trend_data = IPTrendData(
+                ip=ip,
+                trend_data=trend_points,
+                average_cpu=avg_cpu,
+                max_cpu=max_cpu
+            )
+            
+            trend_data_list.append(ip_trend_data)
+        
+        return CPUTrendResponse(
+            top_ips=trend_data_list,
+            query_time=datetime.now(),
+            time_range={"start_time": start_time, "end_time": end_time}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取CPU最高趋势数据失败: {str(e)}")
