@@ -100,6 +100,7 @@ class AlertRuleEngine:
             ip=ip,
             current_value=current_value,
             threshold=threshold,
+            threshold_value=threshold,  # 添加 threshold_value 以兼容数据库中的模板
             field_name=field_name
         )
     

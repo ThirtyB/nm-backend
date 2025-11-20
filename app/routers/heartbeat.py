@@ -19,6 +19,7 @@ class ServiceInfo(BaseModel):
     ip_address: str
     is_online: bool
     last_report_time: datetime
+    record_count: int = 0  # 新增：时间段内记录数量
 
 class ServiceStatusResponse(BaseModel):
     data_collection: List[ServiceInfo] = []
@@ -27,8 +28,8 @@ class ServiceStatusResponse(BaseModel):
     backend: List[ServiceInfo] = []
 
 class TimeRangeRequest(BaseModel):
-    start_time: datetime
-    end_time: datetime
+    start_time: int  # 改为时间戳格式
+    end_time: int    # 改为时间戳格式
 
 @router.post("/report", summary="服务探活报告")
 async def report_heartbeat(
@@ -79,8 +80,8 @@ async def get_service_status(
     """
     查询指定时间段内服务状态
     
-    - **start_time**: 开始时间
-    - **end_time**: 结束时间
+    - **start_time**: 开始时间戳（Unix时间戳，秒）
+    - **end_time**: 结束时间戳（Unix时间戳，秒）
     
     服务类型判断规则：
     - 数据采集开头：2分钟内汇报为在线
@@ -91,16 +92,28 @@ async def get_service_status(
     权限说明：
     - 普通用户：IP地址显示为"隐私保护"
     - 管理员：可见真实IP地址
+    
+    返回字段说明：
+    - service_name: 服务名称
+    - ip_address: IP地址（根据权限显示）
+    - is_online: 是否在线
+    - last_report_time: 最后汇报时间
+    - record_count: 时间段内该服务的记录数量（IP和地址任一不同视为不同的服务）
     """
     try:
-        # 获取时间段内每个服务的最新汇报记录
+        # 将时间戳转换为datetime
+        start_datetime = datetime.fromtimestamp(request.start_time)
+        end_datetime = datetime.fromtimestamp(request.end_time)
+        
+        # 获取时间段内每个服务的最新汇报记录和记录数量
         latest_heartbeats = db.query(
             ServiceHeartbeat.ip_address,
             ServiceHeartbeat.service_name,
-            func.max(ServiceHeartbeat.report_time).label('latest_report_time')
+            func.max(ServiceHeartbeat.report_time).label('latest_report_time'),
+            func.count(ServiceHeartbeat.id).label('record_count')
         ).filter(
-            ServiceHeartbeat.report_time >= request.start_time,
-            ServiceHeartbeat.report_time <= request.end_time
+            ServiceHeartbeat.report_time >= start_datetime,
+            ServiceHeartbeat.report_time <= end_datetime
         ).group_by(
             ServiceHeartbeat.ip_address,
             ServiceHeartbeat.service_name
@@ -116,6 +129,7 @@ async def get_service_status(
         for heartbeat in latest_heartbeats:
             service_name = heartbeat.service_name
             last_report = heartbeat.latest_report_time
+            record_count = heartbeat.record_count  # 获取记录数量
             
             # 判断服务类型和超时时间
             timeout_seconds = None
@@ -149,7 +163,8 @@ async def get_service_status(
                 service_name=service_name,
                 ip_address=ip_address,
                 is_online=is_online,
-                last_report_time=last_report
+                last_report_time=last_report,
+                record_count=record_count  # 新增记录数量
             )
             
             # 添加到对应分类
@@ -187,14 +202,19 @@ async def get_service_status(
     - 其他服务：忽略
     """
     try:
-        # 获取时间段内每个服务的最新汇报记录
+        # 将时间戳转换为datetime
+        start_datetime = datetime.fromtimestamp(request.start_time)
+        end_datetime = datetime.fromtimestamp(request.end_time)
+        
+        # 获取时间段内每个服务的最新汇报记录和记录数量
         latest_heartbeats = db.query(
             ServiceHeartbeat.ip_address,
             ServiceHeartbeat.service_name,
-            func.max(ServiceHeartbeat.report_time).label('latest_report_time')
+            func.max(ServiceHeartbeat.report_time).label('latest_report_time'),
+            func.count(ServiceHeartbeat.id).label('record_count')
         ).filter(
-            ServiceHeartbeat.report_time >= request.start_time,
-            ServiceHeartbeat.report_time <= request.end_time
+            ServiceHeartbeat.report_time >= start_datetime,
+            ServiceHeartbeat.report_time <= end_datetime
         ).group_by(
             ServiceHeartbeat.ip_address,
             ServiceHeartbeat.service_name
