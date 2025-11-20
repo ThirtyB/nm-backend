@@ -193,3 +193,35 @@ class ScoreResponse(BaseModel):
     scores: List[MachineScore] = Field(..., description="机器评分列表")
     total_count: int = Field(..., description="机器总数")
     query_time: datetime = Field(..., description="查询时间")
+
+# 使用率top相关schemas
+class UsageTimeSeries(BaseModel):
+    """使用率时间序列"""
+    timestamp: int = Field(..., description="时间戳")
+    usage_rate: float = Field(..., description="使用率")
+
+class UsageTopItem(BaseModel):
+    """使用率top项目"""
+    ip: str = Field(..., description="IP地址")
+    usage_rate: float = Field(..., description="最新使用率")
+    latest_timestamp: int = Field(..., description="最新数据时间戳")
+    time_series: List[UsageTimeSeries] = Field(..., description="时间段内的使用率序列")
+
+class DimensionUsage(BaseModel):
+    """维度使用率"""
+    name: str = Field(..., description="维度名称")
+    unit: str = Field(..., description="单位")
+    top_items: List[UsageTopItem] = Field(..., description="top项目列表")
+
+class UsageTopRequest(BaseModel):
+    """使用率top查询请求"""
+    start_time: int = Field(..., description="开始时间戳（Unix时间戳）")
+    end_time: int = Field(..., description="结束时间戳（Unix时间戳）")
+    top_count: int = Field(10, description="返回top数量，默认10")
+    dimensions: Optional[List[Literal["CPU", "内存", "磁盘", "网络", "Swap"]]] = Field(None, description="指定维度列表，默认全部维度")
+
+class UsageTopResponse(BaseModel):
+    """使用率top查询响应"""
+    time_range: dict = Field(..., description="查询时间范围")
+    dimensions: Dict[str, DimensionUsage] = Field(..., description="各维度top数据")
+    query_time: datetime = Field(..., description="查询时间")

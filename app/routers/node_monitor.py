@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from app.database import get_db
 from app.models import NodeMonitorMetrics
-from app.schemas import ActiveIPsResponse, NodeLatestMetrics, NodeMetricsResponse, IPMetricsRequest, TimeRangeParams
+from app.schemas import ActiveIPsResponse, NodeLatestMetrics, NodeMetricsResponse, IPMetricsRequest, TimeRangeParams, UsageTopRequest, UsageTopResponse, DimensionUsage
 from app.auth import get_current_user, User
 
 router = APIRouter(
@@ -327,3 +327,210 @@ async def get_monitoring_summary(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取监控汇总信息失败: {str(e)}")
+
+@router.post("/usage-top", response_model=UsageTopResponse)
+async def get_usage_top(
+    request: UsageTopRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取一段时间内五维使用率top数据（基于最新数据排序）及对应的时间序列
+    
+    输入参数：
+    - start_time: 开始时间戳（Unix时间戳，必填）
+    - end_time: 结束时间戳（Unix时间戳，必填）
+    - top_count: 返回top数量，默认10（可选）
+    - dimensions: 指定维度列表，可选值：["CPU", "内存", "磁盘", "网络", "Swap"]，默认全部维度
+    
+    输出格式：
+    {
+        "time_range": {
+            "start_time": 1700000000,
+            "end_time": 1700003600
+        },
+        "dimensions": {
+            "CPU": {
+                "name": "CPU",
+                "unit": "%",
+                "top_items": [
+                    {
+                        "ip": "192.168.1.100",
+                        "usage_rate": 85.5,
+                        "latest_timestamp": 1700003500,
+                        "time_series": [
+                            {"timestamp": 1700000000, "usage_rate": 80.2},
+                            {"timestamp": 1700000100, "usage_rate": 82.1},
+                            {"timestamp": 1700000200, "usage_rate": 85.5}
+                        ]
+                    }
+                ]
+            },
+            "内存": {...},
+            "磁盘": {...},
+            "网络": {...},
+            "Swap": {...}
+        },
+        "query_time": "2024-01-01T12:00:00"
+    }
+    
+    说明：
+    - 基于指定时间段内每个IP的最新监控数据计算使用率进行排序
+    - 同时返回每个top IP在时间段内的完整使用率时间序列（按时间排序）
+    - 网络使用率 = net_rx_kbps + net_tx_kbps（单位：kbps）
+    - CPU使用率 = cpu_usr + cpu_sys + cpu_iow
+    - 内存使用率 = (mem_total - mem_free - mem_buff - mem_cache) / mem_total * 100
+    - Swap使用率 = swap_used / swap_total * 100
+    - 磁盘使用率直接使用disk_used_percent字段
+    """
+    try:
+        # 默认查询所有维度
+        if not request.dimensions:
+            request.dimensions = ["CPU", "内存", "磁盘", "网络", "Swap"]
+        
+        # 获取时间段内的所有监控数据
+        all_data_query = text("""
+            SELECT 
+                ip,
+                ts,
+                cpu_usr,
+                cpu_sys,
+                cpu_iow,
+                mem_total,
+                mem_free,
+                mem_buff,
+                mem_cache,
+                swap_total,
+                swap_used,
+                disk_used_percent,
+                net_rx_kbps,
+                net_tx_kbps
+            FROM node_monitor_metrics 
+            WHERE ts BETWEEN :start_time AND :end_time
+            ORDER BY ip, ts
+        """)
+        
+        result = db.execute(all_data_query, {
+            "start_time": request.start_time,
+            "end_time": request.end_time
+        })
+        
+        rows = result.fetchall()
+        
+        # 按IP分组数据
+        ip_data = {}
+        for row in rows:
+            if row.ip not in ip_data:
+                ip_data[row.ip] = []
+            ip_data[row.ip].append(row)
+        
+        # 计算每个IP的最新使用率
+        ip_latest_usage = {}
+        for ip, data_rows in ip_data.items():
+            # 获取最新记录
+            latest_row = max(data_rows, key=lambda x: x.ts)
+            
+            ip_latest_usage[ip] = {
+                "latest_timestamp": latest_row.ts,
+                "cpu_usage": calculate_cpu_usage(latest_row.cpu_usr, latest_row.cpu_sys, latest_row.cpu_iow),
+                "memory_usage": calculate_memory_usage(latest_row.mem_total, latest_row.mem_free, latest_row.mem_buff, latest_row.mem_cache),
+                "disk_usage": round(latest_row.disk_used_percent, 2) if latest_row.disk_used_percent is not None else None,
+                "network_usage": calculate_network_rate(latest_row.net_rx_kbps, latest_row.net_tx_kbps),
+                "swap_usage": calculate_swap_usage(latest_row.swap_total, latest_row.swap_used),
+                "all_data": data_rows
+            }
+        
+        # 按维度计算使用率并排序
+        dimension_data = {}
+        for dimension in request.dimensions:
+            dimension_data[dimension] = []
+            
+            for ip, usage_data in ip_latest_usage.items():
+                # 正确的维度映射
+                usage_key_map = {
+                    "CPU": "cpu_usage",
+                    "内存": "memory_usage", 
+                    "磁盘": "disk_usage",
+                    "网络": "network_usage",
+                    "Swap": "swap_usage"
+                }
+                
+                usage_key = usage_key_map.get(dimension)
+                if usage_key and usage_data[usage_key] is not None:
+                    dimension_data[dimension].append({
+                        "ip": ip,
+                        "usage_rate": usage_data[usage_key],
+                        "latest_timestamp": usage_data["latest_timestamp"],
+                        "all_data": usage_data["all_data"]
+                    })
+        
+        # 对每个维度按使用率降序排序，取前top_count个
+        result_dimensions = {}
+        dimension_units = {
+            "CPU": "%",
+            "内存": "%", 
+            "磁盘": "%",
+            "网络": "kbps",
+            "Swap": "%"
+        }
+        
+        for dimension in request.dimensions:
+            items = dimension_data[dimension]
+            # 按使用率降序排序
+            items.sort(key=lambda x: x["usage_rate"], reverse=True)
+            # 取前top_count个
+            top_items = items[:request.top_count]
+            
+            # 为每个top item生成时间序列
+            top_items_with_series = []
+            for item in top_items:
+                # 生成时间序列数据
+                time_series = []
+                
+                for data_row in item["all_data"]:
+                    if dimension == "CPU":
+                        usage = calculate_cpu_usage(data_row.cpu_usr, data_row.cpu_sys, data_row.cpu_iow)
+                    elif dimension == "内存":
+                        usage = calculate_memory_usage(data_row.mem_total, data_row.mem_free, data_row.mem_buff, data_row.mem_cache)
+                    elif dimension == "磁盘":
+                        usage = round(data_row.disk_used_percent, 2) if data_row.disk_used_percent is not None else None
+                    elif dimension == "网络":
+                        usage = calculate_network_rate(data_row.net_rx_kbps, data_row.net_tx_kbps)
+                    elif dimension == "Swap":
+                        usage = calculate_swap_usage(data_row.swap_total, data_row.swap_used)
+                    else:
+                        usage = None
+                    
+                    if usage is not None:
+                        time_series.append({
+                            "timestamp": data_row.ts,
+                            "usage_rate": usage
+                        })
+                
+                # 按时间戳排序时间序列
+                time_series.sort(key=lambda x: x["timestamp"])
+                
+                top_items_with_series.append({
+                    "ip": item["ip"],
+                    "usage_rate": item["usage_rate"],
+                    "latest_timestamp": item["latest_timestamp"],
+                    "time_series": time_series
+                })
+            
+            result_dimensions[dimension] = DimensionUsage(
+                name=dimension,
+                unit=dimension_units.get(dimension, "%"),
+                top_items=top_items_with_series
+            )
+        
+        return UsageTopResponse(
+            time_range={
+                "start_time": request.start_time,
+                "end_time": request.end_time
+            },
+            dimensions=result_dimensions,
+            query_time=datetime.now()
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取使用率top数据失败: {str(e)}")
