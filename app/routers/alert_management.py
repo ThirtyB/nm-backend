@@ -7,6 +7,8 @@ from app.database import get_db
 from app.models import AlertRule, NodeMonitorMetrics
 from app.schemas import AlertRuleCreate, AlertRuleUpdate, AlertRuleResponse, AlertInfo, AlertsResponse, AlertQueryParams
 from app.auth import get_current_user, User, get_admin_user
+from app.cache import cache, CacheTTL, cache_key
+from app.decorators import cached, invalidate_cache_pattern
 
 router = APIRouter(
     prefix="/alert-management",
@@ -387,6 +389,7 @@ class AlertRuleEngine:
 
 # 规则管理API（仅管理员）
 @router.post("/rules", response_model=AlertRuleResponse)
+@invalidate_cache_pattern("alert:rules:*")
 async def create_alert_rule(
     rule: AlertRuleCreate,
     db: Session = Depends(get_db),
@@ -440,7 +443,7 @@ async def create_alert_rule(
         if rule.rule_type == "global" and rule.target_ip:
             raise HTTPException(status_code=400, detail="全局规则不能指定target_ip")
         
-        db_rule = AlertRule(**rule.dict())
+        db_rule = AlertRule(**rule.model_dump())
         db.add(db_rule)
         db.commit()
         db.refresh(db_rule)
@@ -453,7 +456,14 @@ async def create_alert_rule(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"创建规则失败: {str(e)}")
 
+def alert_rules_cache_key(rule_type: Optional[str], is_active: Optional[bool]) -> str:
+    """生成告警规则缓存键"""
+    type_str = rule_type or "all"
+    active_str = str(is_active) if is_active is not None else "all"
+    return cache_key("alert", "rules", type_str, active_str)
+
 @router.get("/rules", response_model=List[AlertRuleResponse])
+@cached(ttl_seconds=CacheTTL.TWO_HOURS, key_func=alert_rules_cache_key)
 async def get_alert_rules(
     rule_type: Optional[str] = Query(None, description="规则类型过滤"),
     is_active: Optional[bool] = Query(None, description="是否激活过滤"),
@@ -537,6 +547,7 @@ async def get_alert_rule(
     return rule
 
 @router.put("/rules/{rule_id}", response_model=AlertRuleResponse)
+@invalidate_cache_pattern("alert:rules:*")
 async def update_alert_rule(
     rule_id: int,
     rule_update: AlertRuleUpdate,
@@ -574,7 +585,7 @@ async def update_alert_rule(
         if not db_rule:
             raise HTTPException(status_code=404, detail="规则不存在")
         
-        update_data = rule_update.dict(exclude_unset=True)
+        update_data = rule_update.model_dump(exclude_unset=True)
         
         # 验证rule_type和target_ip的一致性
         if "rule_type" in update_data:
@@ -597,6 +608,7 @@ async def update_alert_rule(
         raise HTTPException(status_code=500, detail=f"更新规则失败: {str(e)}")
 
 @router.delete("/rules/{rule_id}")
+@invalidate_cache_pattern("alert:rules:*")
 async def delete_alert_rule(
     rule_id: int,
     db: Session = Depends(get_db),
@@ -630,7 +642,15 @@ async def delete_alert_rule(
         raise HTTPException(status_code=500, detail=f"删除规则失败: {str(e)}")
 
 # 告警查询API（所有认证用户）
+def alerts_cache_key(start_time: int, end_time: int, ips: Optional[str], alert_levels: Optional[str], rule_types: Optional[str]) -> str:
+    """生成告警信息缓存键"""
+    ips_str = ips or "all"
+    levels_str = alert_levels or "all"
+    types_str = rule_types or "all"
+    return cache_key("alert", "alerts", start_time, end_time, ips_str, levels_str, types_str)
+
 @router.get("/alerts", response_model=AlertsResponse)
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=alerts_cache_key)
 async def get_alerts(
     start_time: int = Query(..., description="开始时间戳"),
     end_time: int = Query(..., description="结束时间戳"),
@@ -698,7 +718,12 @@ async def get_alerts(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询告警失败: {str(e)}")
 
+def ip_alerts_cache_key(ip: str, start_time: int, end_time: int) -> str:
+    """生成IP告警缓存键"""
+    return cache_key("alert", "alerts", ip, start_time, end_time)
+
 @router.get("/alerts/{ip}", response_model=AlertsResponse)
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=ip_alerts_cache_key)
 async def get_ip_alerts(
     ip: str,
     start_time: int = Query(..., description="开始时间戳"),

@@ -7,6 +7,8 @@ from app.database import get_db
 from app.models import NodeMonitorMetrics
 from app.schemas import ActiveIPsResponse, NodeLatestMetrics, NodeMetricsResponse, IPMetricsRequest, TimeRangeParams, UsageTopRequest, UsageTopResponse, DimensionUsage
 from app.auth import get_current_user, User
+from app.cache import cache, CacheTTL, cache_key
+from app.decorators import cached
 
 router = APIRouter(
     prefix="/node-monitor",
@@ -52,7 +54,12 @@ def clean_network_data(net_rx_kbps: Optional[float], net_tx_kbps: Optional[float
     clean_tx = max(0, net_tx_kbps) if net_tx_kbps is not None and net_tx_kbps >= 0 else 0
     return clean_rx, clean_tx
 
+def active_ips_cache_key(start_time: int, end_time: int) -> str:
+    """生成活跃IP缓存键"""
+    return cache_key("node_monitor", "active_ips", start_time, end_time)
+
 @router.get("/active-ips", response_model=ActiveIPsResponse)
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=active_ips_cache_key)
 async def get_active_ips(
     start_time: int = Query(..., description="开始时间戳"),
     end_time: int = Query(..., description="结束时间戳"),
@@ -142,7 +149,12 @@ async def get_active_ips(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询活跃IP失败: {str(e)}")
 
+def ip_metrics_cache_key(ip: str, start_time: int, end_time: int) -> str:
+    """生成IP指标缓存键"""
+    return cache_key("node_monitor", "ip_metrics", ip, start_time, end_time)
+
 @router.get("/ip-metrics/{ip}", response_model=List[NodeMetricsResponse])
+@cached(ttl_seconds=CacheTTL.TEN_MINUTES, key_func=ip_metrics_cache_key)
 async def get_ip_metrics(
     ip: str,
     start_time: int = Query(..., description="开始时间戳"),
@@ -211,7 +223,12 @@ async def get_ip_metrics(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询IP监控数据失败: {str(e)}")
 
+def ip_metrics_body_cache_key(request: IPMetricsRequest) -> str:
+    """生成IP指标POST请求缓存键"""
+    return cache_key("node_monitor", "ip_metrics", request.ip, request.start_time, request.end_time)
+
 @router.get("/ip-metrics", response_model=List[NodeMetricsResponse])
+@cached(ttl_seconds=CacheTTL.TEN_MINUTES, key_func=ip_metrics_body_cache_key)
 async def get_ip_metrics_with_body(
     request: IPMetricsRequest,
     db: Session = Depends(get_db),
@@ -278,7 +295,12 @@ async def get_ip_metrics_with_body(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询IP监控数据失败: {str(e)}")
 
+def summary_cache_key(start_time: int, end_time: int) -> str:
+    """生成监控汇总缓存键"""
+    return cache_key("node_monitor", "summary", start_time, end_time)
+
 @router.get("/summary")
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=summary_cache_key)
 async def get_monitoring_summary(
     start_time: int = Query(..., description="开始时间戳"),
     end_time: int = Query(..., description="结束时间戳"),
@@ -328,7 +350,13 @@ async def get_monitoring_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取监控汇总信息失败: {str(e)}")
 
+def usage_top_cache_key(request: UsageTopRequest) -> str:
+    """生成TOP使用率缓存键"""
+    dimensions_str = ",".join(sorted(request.dimensions)) if request.dimensions else "all"
+    return cache_key("node_monitor", "usage_top", request.start_time, request.end_time, request.top_count, dimensions_str)
+
 @router.post("/usage-top", response_model=UsageTopResponse)
+@cached(ttl_seconds=CacheTTL.FIVE_MINUTES, key_func=usage_top_cache_key)
 async def get_usage_top(
     request: UsageTopRequest,
     db: Session = Depends(get_db),

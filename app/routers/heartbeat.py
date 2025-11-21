@@ -7,6 +7,8 @@ from typing import List, Optional
 from app.database import get_db
 from app.models import ServiceHeartbeat
 from app.auth import get_current_user, get_admin_user, User
+from app.cache import cache, CacheTTL, cache_key
+from app.decorators import cached
 
 router = APIRouter(prefix="/heartbeat", tags=["系统探活"])
 
@@ -71,7 +73,12 @@ async def report_heartbeat(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"记录探活失败: {str(e)}")
 
+def heartbeat_cache_key(start_time: int, end_time: int) -> str:
+    """生成心跳状态缓存键"""
+    return cache_key("heartbeat", "status", start_time, end_time)
+
 @router.post("/status", summary="查询服务状态")
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=heartbeat_cache_key)
 async def get_service_status(
     request: TimeRangeRequest,
     db: Session = Depends(get_db),
@@ -186,77 +193,6 @@ async def get_service_status(
         }
         
         return response_dict
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查询服务状态失败: {str(e)}")
-    """
-    查询指定时间段内服务状态
-    
-    - **start_time**: 开始时间
-    - **end_time**: 结束时间
-    
-    服务类型判断规则：
-    - 数据采集开头：2分钟内汇报为在线
-    - kafka开头：2分钟内汇报为在线  
-    - 前端/后端开头：30秒内汇报为在线
-    - 其他服务：忽略
-    """
-    try:
-        # 将时间戳转换为datetime
-        start_datetime = datetime.fromtimestamp(request.start_time)
-        end_datetime = datetime.fromtimestamp(request.end_time)
-        
-        # 获取时间段内每个服务的最新汇报记录和记录数量
-        latest_heartbeats = db.query(
-            ServiceHeartbeat.ip_address,
-            ServiceHeartbeat.service_name,
-            func.max(ServiceHeartbeat.report_time).label('latest_report_time'),
-            func.count(ServiceHeartbeat.id).label('record_count')
-        ).filter(
-            ServiceHeartbeat.report_time >= start_datetime,
-            ServiceHeartbeat.report_time <= end_datetime
-        ).group_by(
-            ServiceHeartbeat.ip_address,
-            ServiceHeartbeat.service_name
-        ).all()
-        
-        results = []
-        current_time = datetime.utcnow()
-        
-        for heartbeat in latest_heartbeats:
-            service_name = heartbeat.service_name
-            last_report = heartbeat.latest_report_time
-            
-            # 判断服务类型和超时时间
-            service_type = None
-            timeout_seconds = None
-            
-            if service_name.startswith("数据采集"):
-                service_type = "数据采集"
-                timeout_seconds = 120  # 2分钟
-            elif service_name.startswith("kafka"):
-                service_type = "kafka进程"
-                timeout_seconds = 120  # 2分钟
-            elif service_name.startswith("前端") or service_name.startswith("后端"):
-                service_type = "前端/后端"
-                timeout_seconds = 30  # 30秒
-            else:
-                # 忽略其他服务
-                continue
-            
-            # 判断是否在线
-            time_diff = current_time - last_report
-            is_online = time_diff.total_seconds() <= timeout_seconds
-            
-            results.append(ServiceStatusResponse(
-                service_type=service_type,
-                service_name=service_name,
-                ip_address=heartbeat.ip_address,
-                is_online=is_online,
-                last_report_time=last_report
-            ))
-        
-        return results
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询服务状态失败: {str(e)}")

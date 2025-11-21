@@ -6,6 +6,8 @@ from app.database import get_db
 from app.schemas import MachineScore, DimensionScore, ScoreQueryParams, ScoreResponse
 from app.auth import get_current_user, User
 from app.routers.alert_management import AlertRuleEngine, AlertInfo
+from app.cache import cache, CacheTTL, cache_key
+from app.decorators import cached
 
 router = APIRouter(
     prefix="/scoring",
@@ -155,7 +157,14 @@ class AlertScoringEngine:
             query_time=datetime.now()
         )
 
+def machine_scores_cache_key(start_time: int, end_time: int, ips: Optional[str], include_details: bool) -> str:
+    """生成机器评分缓存键"""
+    ips_str = ips or "all"
+    details_str = str(include_details)
+    return cache_key("scoring", "machines", start_time, end_time, ips_str, details_str)
+
 @router.get("/machines", response_model=ScoreResponse)
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=machine_scores_cache_key)
 async def get_machine_scores(
     start_time: int = Query(..., description="开始时间戳"),
     end_time: int = Query(..., description="结束时间戳"),
@@ -232,7 +241,13 @@ async def get_machine_scores(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询评分失败: {str(e)}")
 
+def machine_score_cache_key(ip: str, start_time: int, end_time: int, include_details: bool) -> str:
+    """生成单个机器评分缓存键"""
+    details_str = str(include_details)
+    return cache_key("scoring", "machine", ip, start_time, end_time, details_str)
+
 @router.get("/machines/{ip}", response_model=MachineScore)
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=machine_score_cache_key)
 async def get_machine_score(
     ip: str,
     start_time: int = Query(..., description="开始时间戳"),
@@ -275,7 +290,13 @@ async def get_machine_score(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询机器评分失败: {str(e)}")
 
+def scoring_summary_cache_key(start_time: int, end_time: int, ips: Optional[str]) -> str:
+    """生成评分汇总缓存键"""
+    ips_str = ips or "all"
+    return cache_key("scoring", "summary", start_time, end_time, ips_str)
+
 @router.get("/summary")
+@cached(ttl_seconds=CacheTTL.ONE_MINUTE, key_func=scoring_summary_cache_key)
 async def get_scoring_summary(
     start_time: int = Query(..., description="开始时间戳"),
     end_time: int = Query(..., description="结束时间戳"),

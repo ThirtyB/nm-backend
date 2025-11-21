@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import TokenData
 from app.config import settings
+from app.cache import cache, CacheTTL, cache_key
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
@@ -33,7 +34,31 @@ def verify_password(plain_password, hashed_password):
         return pwd_context.verify(plain_password, hashed_password)
 
 def get_user(db: Session, username: str):
-    return db.query(User).filter(User.username == username).first()
+    # 先尝试从缓存获取
+    cache_key_str = cache_key("user", "info", username)
+    cached_user = cache.get(cache_key_str)
+    if cached_user:
+        # 将缓存数据转换为User对象
+        user = User()
+        for key, value in cached_user.items():
+            setattr(user, key, value)
+        return user
+    
+    # 缓存中没有，从数据库查询
+    user = db.query(User).filter(User.username == username).first()
+    if user:
+        # 存入缓存，2小时过期
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "user_type": user.user_type,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "last_login": user.last_login.isoformat() if user.last_login else None
+        }
+        cache.set(cache_key_str, user_data, CacheTTL.TWO_HOURS)
+    
+    return user
 
 def authenticate_user(db: Session, username: str, password: str):
     user = get_user(db, username)
