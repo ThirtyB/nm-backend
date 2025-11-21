@@ -108,3 +108,34 @@ class DatabaseAccessLog(Base):
     error_message = Column(Text)
     affected_rows = Column(Integer)
     query_hash = Column(String(64))
+
+class AccessLog(Base):
+    __tablename__ = "access_logs"
+    
+    id = Column(BigInteger, primary_key=True, index=True)
+    trace_id = Column(Text)
+    logtime = Column(DateTime(timezone=True))
+    remote_addr = Column(String(45))  # 客户端IP
+    server_addr = Column(String(45))  # 服务器IP
+    server_port = Column(Integer)
+    ssl_protocol = Column(Text)
+    connection = Column(Text)
+    connection_requests = Column(Integer)
+    connection_time = Column(Float)
+    request_method = Column(Text)  # HTTP方法
+    request_uri = Column(Text)     # 请求URI
+    server_protocol = Column(Text)
+    request_body = Column(Text)
+    request_time = Column(Float)
+    request_completion = Column(Text)
+    status = Column(Integer)        # HTTP状态码
+    bytes_sent = Column(BigInteger)
+    body_bytes_sent = Column(BigInteger)
+    http_referer = Column(Text)
+    http_user_agent = Column(Text)
+    upstream_addr = Column(Text)
+    upstream_bytes_received = Column(Text)
+    upstream_bytes_sent = Column(Text)
+    upstream_response_time = Column(Text)
+    upstream_connect_time = Column(Text)
+    inserted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

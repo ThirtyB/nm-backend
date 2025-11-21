@@ -29,25 +29,19 @@ def get_password_hash(password):
 
 def verify_password(plain_password, hashed_password):
     try:
-        return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
+        if hashed_password:
+            return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
+        else:
+            return False
     except:
         return pwd_context.verify(plain_password, hashed_password)
 
 def get_user(db: Session, username: str):
-    # 先尝试从缓存获取
-    cache_key_str = cache_key("user", "info", username)
-    cached_user = cache.get(cache_key_str)
-    if cached_user:
-        # 将缓存数据转换为User对象
-        user = User()
-        for key, value in cached_user.items():
-            setattr(user, key, value)
-        return user
-    
-    # 缓存中没有，从数据库查询
+    # 缓存不包含密码哈希，直接从数据库查询
     user = db.query(User).filter(User.username == username).first()
     if user:
-        # 存入缓存，2小时过期
+        # 存入缓存基本信息（不包含密码哈希）
+        cache_key_str = cache_key("user", "info", username)
         user_data = {
             "id": user.id,
             "username": user.username,
