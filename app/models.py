@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Float, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Float, Text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -81,3 +81,30 @@ class ServiceHeartbeat(Base):
     service_name = Column(String(100), nullable=False, index=True)
     report_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class RedisAccessLog(Base):
+    __tablename__ = "redis_access_log"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    client_ip = Column(String(45), nullable=False, index=True)
+    operation = Column(String(20), nullable=False, index=True)
+    redis_key = Column(String(255), nullable=False)
+    access_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    execution_time_ms = Column(Integer)
+    status = Column(String(10), default="success")
+    error_message = Column(Text)
+    additional_info = Column(JSON)
+
+class DatabaseAccessLog(Base):
+    __tablename__ = "database_access_log"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    client_ip = Column(String(45), nullable=False, index=True)
+    operation = Column(String(20), nullable=False, index=True)
+    table_name = Column(String(100), nullable=False, index=True)
+    access_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    execution_time_ms = Column(Integer)
+    status = Column(String(10), default="success")
+    error_message = Column(Text)
+    affected_rows = Column(Integer)
+    query_hash = Column(String(64))

@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer
 from app.database import engine, Base
 from app.routers import auth, users, node_monitor, alert_management, scoring, heartbeat, cache_management
+from app.access_logger import set_client_ip
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +23,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # 获取客户端IP地址
+    client_ip = request.client.host
+    if "x-forwarded-for" in request.headers:
+        client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
+    elif "x-real-ip" in request.headers:
+        client_ip = request.headers["x-real-ip"]
+    
+    # 设置当前请求的客户端IP
+    set_client_ip(client_ip)
+    
+    response = await call_next(request)
+    return response
 
 app.include_router(auth.router)
 app.include_router(users.router)
