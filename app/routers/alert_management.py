@@ -462,7 +462,7 @@ def alert_rules_cache_key(rule_type: Optional[str], is_active: Optional[bool]) -
     active_str = str(is_active) if is_active is not None else "all"
     return cache_key("alert", "rules", type_str, active_str)
 
-@router.get("/rules", response_model=List[AlertRuleResponse])
+@router.get("/rules", response_model=List[dict])
 @cached(ttl_seconds=CacheTTL.TWO_HOURS, key_func=alert_rules_cache_key)
 async def get_alert_rules(
     rule_type: Optional[str] = Query(None, description="规则类型过滤"),
@@ -504,7 +504,29 @@ async def get_alert_rules(
             query = query.filter(AlertRule.is_active == is_active)
         
         rules = query.order_by(AlertRule.rule_type.desc(), AlertRule.id).all()
-        return rules
+        
+        # 转换为字典列表以提高缓存序列化性能
+        rules_dict = []
+        for rule in rules:
+            rule_dict = {
+                "id": rule.id,
+                "rule_name": rule.rule_name,
+                "rule_type": rule.rule_type,
+                "target_ip": rule.target_ip,
+                "condition_field": rule.condition_field,
+                "condition_operator": rule.condition_operator,
+                "condition_value": rule.condition_value,
+                "time_range_start": rule.time_range_start,
+                "time_range_end": rule.time_range_end,
+                "alert_level": rule.alert_level,
+                "alert_message": rule.alert_message,
+                "is_active": rule.is_active,
+                "created_at": rule.created_at.isoformat() if rule.created_at else None,
+                "updated_at": rule.updated_at.isoformat() if rule.updated_at else None
+            }
+            rules_dict.append(rule_dict)
+        
+        return rules_dict
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询规则失败: {str(e)}")
