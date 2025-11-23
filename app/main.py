@@ -3,6 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.routers import auth, users, node_monitor, alert_management, scoring, heartbeat, cache_management
 from app.access_logger import set_client_ip
+from app.heartbeat_checker import heartbeat_checker
+import asyncio
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -54,3 +61,18 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时启动心跳检查任务"""
+    logger.info("启动应用...")
+    
+    # 在后台启动心跳检查任务
+    asyncio.create_task(heartbeat_checker.start_heartbeat_check())
+    logger.info("心跳检查任务已启动")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时停止心跳检查任务"""
+    logger.info("关闭应用...")
+    heartbeat_checker.stop()
