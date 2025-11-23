@@ -4,11 +4,14 @@ from sqlalchemy import func, desc, and_
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+import logging
 from app.database import get_db
 from app.models import ServiceHeartbeat, NodeMonitorMetrics, DatabaseAccessLog, RedisAccessLog, AccessLog
 from app.auth import get_current_user, get_admin_user, User
 from app.cache import cache, CacheTTL, cache_key
 from app.decorators import cached
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/heartbeat", tags=["系统探活"])
 
@@ -67,6 +70,9 @@ async def report_heartbeat(
     - **ip_address**: 服务所在IP地址
     - **service_name**: 服务名称
     """
+    # 记录收到的请求信息
+    logger.info(f"收到心跳报告请求 - IP地址: {request.ip_address}, 服务名称: {request.service_name}")
+    
     try:
         # 创建探活记录
         heartbeat = ServiceHeartbeat(
@@ -79,7 +85,7 @@ async def report_heartbeat(
         db.commit()
         db.refresh(heartbeat)
         
-        return {
+        response_data = {
             "status": "success",
             "message": "探活报告已记录",
             "data": {
@@ -90,8 +96,17 @@ async def report_heartbeat(
             }
         }
         
+        # 记录成功响应信息
+        logger.info(f"心跳报告记录成功 - ID: {heartbeat.id}, IP地址: {heartbeat.ip_address}, "
+                   f"服务名称: {heartbeat.service_name}, 报告时间: {heartbeat.report_time}")
+        
+        return response_data
+        
     except Exception as e:
         db.rollback()
+        # 记录错误信息
+        logger.error(f"记录探活失败 - IP地址: {request.ip_address}, 服务名称: {request.service_name}, "
+                    f"错误信息: {str(e)}")
         raise HTTPException(status_code=500, detail=f"记录探活失败: {str(e)}")
 
 def heartbeat_cache_key(start_time: int, end_time: int) -> str:
