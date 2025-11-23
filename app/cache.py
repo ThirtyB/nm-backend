@@ -52,19 +52,11 @@ class RedisCache:
             self.delete(key)
             return None
         finally:
-            # 记录访问日志
+            # 记录简化的访问日志
             try:
                 from app.database import get_db
                 db = next(get_db())
-                execution_time = int((time.time() - start_time) * 1000)
-                log_redis_access(
-                    db=db,
-                    operation="GET",
-                    redis_key=key,
-                    execution_time_ms=execution_time,
-                    status=status,
-                    error_message=error_message
-                )
+                log_redis_access(db=db)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -95,20 +87,11 @@ class RedisCache:
             logger.error(f"Redis设置缓存失败 {key}: {e}")
             return False
         finally:
-            # 记录访问日志
+            # 记录简化的访问日志
             try:
                 from app.database import get_db
                 db = next(get_db())
-                execution_time = int((time.time() - start_time) * 1000)
-                log_redis_access(
-                    db=db,
-                    operation="SET",
-                    redis_key=key,
-                    execution_time_ms=execution_time,
-                    status=status,
-                    error_message=error_message,
-                    additional_info=additional_info
-                )
+                log_redis_access(db=db)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -211,19 +194,11 @@ class RedisCache:
             logger.error(f"Redis删除缓存失败 {key}: {e}")
             return False
         finally:
-            # 记录访问日志
+            # 记录简化的访问日志
             try:
                 from app.database import get_db
                 db = next(get_db())
-                execution_time = int((time.time() - start_time) * 1000)
-                log_redis_access(
-                    db=db,
-                    operation="DELETE",
-                    redis_key=key,
-                    execution_time_ms=execution_time,
-                    status=status,
-                    error_message=error_message
-                )
+                log_redis_access(db=db)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -248,20 +223,11 @@ class RedisCache:
             logger.error(f"Redis批量删除缓存失败 {pattern}: {e}")
             return 0
         finally:
-            # 记录访问日志
+            # 记录简化的访问日志
             try:
                 from app.database import get_db
                 db = next(get_db())
-                execution_time = int((time.time() - start_time) * 1000)
-                log_redis_access(
-                    db=db,
-                    operation="DELETE_PATTERN",
-                    redis_key=pattern,
-                    execution_time_ms=execution_time,
-                    status=status,
-                    error_message=error_message,
-                    additional_info={"deleted_count": deleted_count}
-                )
+                log_redis_access(db=db)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
 

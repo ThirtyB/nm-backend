@@ -82,32 +82,14 @@ class ServiceHeartbeat(Base):
     report_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-class RedisAccessLog(Base):
-    __tablename__ = "redis_access_log"
+class ServiceAccessLog(Base):
+    __tablename__ = "service_access_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    client_ip = Column(String(45), nullable=False, index=True)
-    operation = Column(String(20), nullable=False, index=True)
-    redis_key = Column(String(255), nullable=False)
+    client_ip = Column(String(45), nullable=False, index=True)  # 访问后端的客户端IP
+    service_ip = Column(String(45), nullable=False, index=True)  # 被访问的服务IP（数据库或Redis）
+    service_type = Column(String(20), nullable=False, index=True)  # 服务类型：'database' 或 'redis'
     access_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
-    execution_time_ms = Column(Integer)
-    status = Column(String(10), default="success")
-    error_message = Column(Text)
-    additional_info = Column(JSON)
-
-class DatabaseAccessLog(Base):
-    __tablename__ = "database_access_log"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    client_ip = Column(String(45), nullable=False, index=True)
-    operation = Column(String(20), nullable=False, index=True)
-    table_name = Column(String(100), nullable=False, index=True)
-    access_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
-    execution_time_ms = Column(Integer)
-    status = Column(String(10), default="success")
-    error_message = Column(Text)
-    affected_rows = Column(Integer)
-    query_hash = Column(String(64))
 
 class AccessLog(Base):
     __tablename__ = "access_logs"

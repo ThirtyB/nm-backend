@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import logging
 from app.database import get_db
-from app.models import ServiceHeartbeat, NodeMonitorMetrics, DatabaseAccessLog, RedisAccessLog, AccessLog
+from app.models import ServiceHeartbeat, NodeMonitorMetrics, ServiceAccessLog, AccessLog
 from app.auth import get_current_user, get_admin_user, User
 from app.cache import cache, CacheTTL, cache_key
 from app.decorators import cached
@@ -323,16 +323,18 @@ def get_traffic_status(
     database_to_backend = []
     if is_admin:
         db_access = db.query(
-            DatabaseAccessLog.client_ip,
-            func.count(DatabaseAccessLog.id).label('access_count')
+            ServiceAccessLog.service_ip,
+            ServiceAccessLog.client_ip,
+            func.count(ServiceAccessLog.id).label('access_count')
         ).filter(
-            DatabaseAccessLog.access_time >= start_datetime,
-            DatabaseAccessLog.access_time <= end_datetime
-        ).group_by(DatabaseAccessLog.client_ip).all()
+            ServiceAccessLog.service_type == 'database',
+            ServiceAccessLog.access_time >= start_datetime,
+            ServiceAccessLog.access_time <= end_datetime
+        ).group_by(ServiceAccessLog.service_ip, ServiceAccessLog.client_ip).all()
         
         for access in db_access:
             database_to_backend.append(TrafficInfo(
-                source_ip="database_server",
+                source_ip=access.service_ip,
                 target_ip=access.client_ip,
                 data_count=access.access_count
             ))
@@ -341,16 +343,18 @@ def get_traffic_status(
     redis_to_backend = []
     if is_admin:
         redis_access = db.query(
-            RedisAccessLog.client_ip,
-            func.count(RedisAccessLog.id).label('access_count')
+            ServiceAccessLog.service_ip,
+            ServiceAccessLog.client_ip,
+            func.count(ServiceAccessLog.id).label('access_count')
         ).filter(
-            RedisAccessLog.access_time >= start_datetime,
-            RedisAccessLog.access_time <= end_datetime
-        ).group_by(RedisAccessLog.client_ip).all()
+            ServiceAccessLog.service_type == 'redis',
+            ServiceAccessLog.access_time >= start_datetime,
+            ServiceAccessLog.access_time <= end_datetime
+        ).group_by(ServiceAccessLog.service_ip, ServiceAccessLog.client_ip).all()
         
         for access in redis_access:
             redis_to_backend.append(TrafficInfo(
-                source_ip="redis_server",
+                source_ip=access.service_ip,
                 target_ip=access.client_ip,
                 data_count=access.access_count
             ))
