@@ -121,3 +121,18 @@ class AccessLog(Base):
     upstream_response_time = Column(Text)
     upstream_connect_time = Column(Text)
     inserted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class RequestLog(Base):
+    __tablename__ = "request_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    frontend_ip = Column(String(45), nullable=False, index=True)  # 前端IP地址（支持IPv6）
+    backend_ip = Column(String(45), nullable=False, index=True)   # 后端服务器IP地址
+    request_method = Column(String(10), nullable=False, index=True) # HTTP方法
+    request_path = Column(String(500), nullable=False, index=True) # 请求路径
+    query_params = Column(Text)                                     # 查询参数（JSON格式）
+    request_time = Column(DateTime(timezone=True), nullable=False, index=True) # 请求时间
+    response_status = Column(Integer, index=True)                   # 响应状态码
+    response_time_ms = Column(Integer)                              # 响应时间（毫秒）
+    user_agent = Column(Text)                                       # 用户代理
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)

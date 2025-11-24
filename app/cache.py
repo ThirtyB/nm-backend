@@ -3,7 +3,7 @@ import redis
 from typing import Any, Optional, Union
 from datetime import timedelta
 from app.config import settings
-from app.access_logger import log_redis_access, get_client_ip
+from app.access_logger import log_redis_access, get_client_ip, get_real_ip, get_local_ip
 import logging
 import time
 
@@ -56,7 +56,8 @@ class RedisCache:
             try:
                 from app.database import get_db
                 db = next(get_db())
-                log_redis_access(db=db)
+                backend_ip = get_real_ip(get_local_ip())
+                log_redis_access(db=db, backend_ip=backend_ip)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -91,7 +92,8 @@ class RedisCache:
             try:
                 from app.database import get_db
                 db = next(get_db())
-                log_redis_access(db=db)
+                backend_ip = get_real_ip(get_local_ip())
+                log_redis_access(db=db, backend_ip=backend_ip)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -198,7 +200,8 @@ class RedisCache:
             try:
                 from app.database import get_db
                 db = next(get_db())
-                log_redis_access(db=db)
+                backend_ip = get_real_ip(get_local_ip())
+                log_redis_access(db=db, backend_ip=backend_ip)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
     
@@ -227,7 +230,8 @@ class RedisCache:
             try:
                 from app.database import get_db
                 db = next(get_db())
-                log_redis_access(db=db)
+                backend_ip = get_real_ip(get_local_ip())
+                log_redis_access(db=db, backend_ip=backend_ip)
             except Exception as log_error:
                 logger.error(f"记录Redis访问日志失败: {log_error}")
 

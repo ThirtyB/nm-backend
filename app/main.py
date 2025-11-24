@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.routers import auth, users, node_monitor, alert_management, scoring, heartbeat, cache_management
-from app.access_logger import set_client_ip
+from app.access_logger import set_client_ip, RequestLoggingMiddleware
 from app.heartbeat_checker import heartbeat_checker
 import asyncio
 import logging
@@ -30,6 +30,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加请求日志中间件
+app.add_middleware(RequestLoggingMiddleware)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

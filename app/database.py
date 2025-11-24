@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, MetaData, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
-from app.access_logger import log_database_access, generate_query_hash, get_client_ip
+from app.access_logger import log_database_access, generate_query_hash, get_client_ip, get_real_ip, get_local_ip
 import time
 import logging
 
@@ -42,7 +42,8 @@ def after_execute(conn, clauseelement, multiparams, params, execution_options, r
         # 异步记录简化的数据库访问日志
         try:
             db = SessionLocal()
-            log_database_access(db=db)
+            backend_ip = get_real_ip(get_local_ip())
+            log_database_access(db=db, backend_ip=backend_ip)
             db.close()
         except Exception as log_error:
             logger.error(f"记录数据库访问日志失败: {log_error}")
@@ -58,10 +59,11 @@ def handle_error(exception_context):
         if "SERVICE_ACCESS_LOGS" in sql:
             return
         
-        # 记录简化的数据库访问日志（即使是错误也记录）
+        # 记录简化的数据库日志（即使是错误也记录）
         try:
             db = SessionLocal()
-            log_database_access(db=db)
+            backend_ip = get_real_ip(get_local_ip())
+            log_database_access(db=db, backend_ip=backend_ip)
             db.close()
         except Exception as log_error:
             logger.error(f"记录数据库错误日志失败: {log_error}")

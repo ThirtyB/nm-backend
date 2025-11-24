@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 import logging
 import re
 from app.database import get_db
-from app.models import ServiceHeartbeat, NodeMonitorMetrics, ServiceAccessLog, AccessLog
+from app.models import ServiceHeartbeat, NodeMonitorMetrics, ServiceAccessLog, AccessLog, RequestLog
 from app.auth import get_admin_user, User
 
 logger = logging.getLogger(__name__)
@@ -304,27 +304,22 @@ def get_connection_status(db: Session, start_datetime: datetime, end_datetime: d
     # 5. 后端到前端
     backend_to_frontend = []
     try:
-        # 从access_logs表获取数据
-        access_logs = db.query(
-            AccessLog.server_addr,
-            AccessLog.upstream_addr,
-            func.count(AccessLog.id).label('access_count')
+        # 从request_logs表获取数据
+        request_logs = db.query(
+            RequestLog.frontend_ip,
+            RequestLog.backend_ip,
+            func.count(RequestLog.id).label('request_count')
         ).filter(
-            AccessLog.logtime >= start_datetime,
-            AccessLog.logtime <= end_datetime
-        ).group_by(AccessLog.server_addr, AccessLog.upstream_addr).all()
+            RequestLog.request_time >= start_datetime,
+            RequestLog.request_time <= end_datetime
+        ).group_by(RequestLog.frontend_ip, RequestLog.backend_ip).all()
         
-        for access in access_logs:
-            # 提取IP地址（去除端口）
-            frontend_ip = extract_ip_from_address(access.server_addr)
-            backend_ip = extract_ip_from_address(access.upstream_addr)
-            
-            if frontend_ip and backend_ip:
-                backend_to_frontend.append(ConnectionInfo(
-                    source_ip=backend_ip,
-                    target_ip=frontend_ip,
-                    data_count=access.access_count
-                ))
+        for log in request_logs:
+            backend_to_frontend.append(ConnectionInfo(
+                source_ip=log.backend_ip,
+                target_ip=log.frontend_ip,
+                data_count=log.request_count
+            ))
     except Exception as e:
         logger.warning(f"查询后端到前端连接失败: {e}")
     
