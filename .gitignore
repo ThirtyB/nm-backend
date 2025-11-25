@@ -126,3 +126,17 @@ yarn-error.log*
 *.pfx
 private_key*
 secret_key*
+secrets.yml
+secrets.toml
+secrets.json
+*.secrets.yml
+*.secrets.toml
+*.secrets.json
+
+# Secure directory (contains all security-related files)
+secure/secrets.yml
+secure/secrets.toml
+secure/secrets.json
+secure/*.secrets.yml
+secure/*.secrets.toml
+secure/*.secrets.json
