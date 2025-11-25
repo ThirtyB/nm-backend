@@ -46,13 +46,33 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    user = authenticate_user(db, user_data.username, user_data.password)
-    if not user:
+    from app.auth import is_bcrypt_hash
+    
+    user = db.query(User).filter(User.username == user_data.username).first()
+    if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # 验证密码
+    from app.auth import verify_password
+    if not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 检查是否需要迁移密码哈希（从bcrypt到PBKDF2-HMAC-SM3）
+    if is_bcrypt_hash(user.hashed_password):
+        print(f"迁移用户 {user.username} 的密码哈希到PBKDF2-HMAC-SM3")
+        # 生成新的PBKDF2-HMAC-SM3哈希
+        from app.auth import get_password_hash
+        new_hash = get_password_hash(user_data.password)
+        user.hashed_password = new_hash
+        print(f"密码哈希迁移完成")
     
     # 更新最后登录时间
     user.last_login = datetime.utcnow()

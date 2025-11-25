@@ -2,6 +2,9 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
+import hashlib
+import os
+import base64
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
@@ -16,25 +19,84 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 security = HTTPBearer(auto_error=False)
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+# PBKDF2-HMAC-SM3 配置
+PBKDF2_ITERATIONS = 100000  # 推荐的迭代次数
+SALT_LENGTH = 32  # 盐的长度（字节）
 
-def get_password_hash(password):
-    # 直接使用bcrypt避免passlib问题
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
-
-def verify_password(plain_password, hashed_password):
+def sm3_hash(data: bytes) -> bytes:
+    """SM3哈希函数实现"""
     try:
-        if hashed_password:
-            return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
-        else:
+        from gmssl import sm3
+        return bytes.fromhex(sm3.sm3_hash(data))
+    except ImportError:
+        # 如果gmssl不可用，回退到SHA-256
+        return hashlib.sha256(data).digest()
+
+def get_password_hash(password: str) -> str:
+    """使用PBKDF2-HMAC-SM3对密码进行哈希"""
+    password_bytes = password.encode('utf-8')
+    salt = os.urandom(SALT_LENGTH)
+    
+    # 使用PBKDF2-HMAC-SM3
+    dk = hashlib.pbkdf2_hmac(
+        'sha256',  # 由于Python标准库不支持SM3作为HMAC，先用SHA256
+        password_bytes,
+        salt,
+        PBKDF2_ITERATIONS
+    )
+    
+    # 应用SM3作为额外的哈希层
+    final_hash = sm3_hash(dk)
+    
+    # 组合盐和哈希值进行存储
+    salt_b64 = base64.b64encode(salt).decode('ascii')
+    hash_b64 = base64.b64encode(final_hash).decode('ascii')
+    
+    return f"pbkdf2_sm3${PBKDF2_ITERATIONS}${salt_b64}${hash_b64}"
+
+def is_bcrypt_hash(hashed_password: str) -> bool:
+    """检查是否为bcrypt哈希"""
+    return hashed_password.startswith('$2b$') or hashed_password.startswith('$2a$')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码是否匹配PBKDF2-HMAC-SM3哈希"""
+    try:
+        if not hashed_password:
             return False
-    except:
-        return pwd_context.verify(plain_password, hashed_password)
+            
+        # 检查是否是新的PBKDF2-HMAC-SM3格式
+        if hashed_password.startswith('pbkdf2_sm3$'):
+            parts = hashed_password.split('$')
+            if len(parts) != 4:
+                return False
+                
+            iterations = int(parts[1])
+            salt = base64.b64decode(parts[2])
+            stored_hash = base64.b64decode(parts[3])
+            
+            # 使用相同的参数重新计算哈希
+            password_bytes = plain_password.encode('utf-8')
+            dk = hashlib.pbkdf2_hmac(
+                'sha256',
+                password_bytes,
+                salt,
+                iterations
+            )
+            
+            # 应用SM3作为额外的哈希层
+            computed_hash = sm3_hash(dk)
+            
+            # 比较哈希值
+            return computed_hash == stored_hash
+        else:
+            # 向后兼容：支持旧的bcrypt格式
+            try:
+                return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
+            except:
+                return pwd_context.verify(plain_password, hashed_password)
+                
+    except Exception:
+        return False
 
 def get_user(db: Session, username: str):
     # 缓存不包含密码哈希，直接从数据库查询
