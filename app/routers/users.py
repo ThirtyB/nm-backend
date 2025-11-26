@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserResponse, UserUpdate, UserPartialUpdate, AdminUserCreate
 from app.auth import get_current_admin_user, get_password_hash
+from app.utils.phone_validation import check_phone_unique
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
 
@@ -23,6 +24,14 @@ async def create_user(
             )
         else:
             # 用户存在但已停用，重新激活并更新密码，按照管理员指定的权限设置
+            # 检查手机号唯一性（如果提供了新手机号）
+            if user.phone is not None and user.phone.strip() != "":
+                if not check_phone_unique(db, user.phone, exclude_user_id=db_user.id):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Phone number already registered"
+                    )
+            
             db_user.hashed_password = get_password_hash(user.password)
             db_user.is_active = True
             db_user.user_type = user.user_type  # 按照管理员指定的权限设置
@@ -30,6 +39,14 @@ async def create_user(
             db.commit()
             db.refresh(db_user)
             return db_user
+    
+    # 检查手机号唯一性
+    if user.phone is not None and user.phone.strip() != "":
+        if not check_phone_unique(db, user.phone):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered"
+            )
     
     hashed_password = get_password_hash(user.password)
     db_user = User(
@@ -56,7 +73,7 @@ async def get_users(
     query = db.query(User)
     if not include_inactive:
         query = query.filter(User.is_active == True)
-    users = query.offset(skip).limit(limit).all()
+    users = query.order_by(User.id).offset(skip).limit(limit).all()
     return users
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -100,6 +117,13 @@ async def update_user(
         db_user.is_active = user_update.is_active
     
     if user_update.phone is not None:
+        # 检查手机号唯一性
+        if user_update.phone.strip() != "":
+            if not check_phone_unique(db, user_update.phone, exclude_user_id=user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number already registered"
+                )
         db_user.set_phone_encrypted(user_update.phone)
     
     db.commit()
@@ -129,6 +153,13 @@ async def partial_update_user(
         db_user.is_active = user_update.is_active
     
     if user_update.phone is not None:
+        # 检查手机号唯一性
+        if user_update.phone.strip() != "":
+            if not check_phone_unique(db, user_update.phone, exclude_user_id=user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number already registered"
+                )
         db_user.set_phone_encrypted(user_update.phone)
     
     db.commit()

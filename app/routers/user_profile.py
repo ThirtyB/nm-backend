@@ -4,6 +4,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import UserProfile, UserPhoneUpdate
 from app.auth import get_current_user
+from app.utils.phone_validation import check_phone_unique
 
 router = APIRouter(prefix="/profile", tags=["用户个人信息"])
 
@@ -34,8 +35,13 @@ async def update_my_phone(
                 detail="手机号长度不正确"
             )
     
-    # 注意：由于手机号现在加密存储，无法直接查询重复
-    # 在实际应用中，可以考虑维护一个单独的哈希索引用于查重
+    # 检查手机号唯一性
+    if phone_update.phone is not None and phone_update.phone.strip() != "":
+        if not check_phone_unique(db, phone_update.phone, exclude_user_id=current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered"
+            )
     
     # 更新手机号（使用加密方法）
     current_user.set_phone_encrypted(phone_update.phone)

@@ -11,6 +11,7 @@ class UserBase(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
+    phone: Optional[str] = None  # 手机号，可以为空
 
 class AdminUserCreate(BaseModel):
     username: str
