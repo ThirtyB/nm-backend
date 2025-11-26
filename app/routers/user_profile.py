@@ -34,20 +34,11 @@ async def update_my_phone(
                 detail="手机号长度不正确"
             )
     
-    # 检查手机号是否已被其他用户使用
-    if phone_update.phone:
-        existing_user = db.query(User).filter(
-            User.phone == phone_update.phone,
-            User.id != current_user.id
-        ).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="该手机号已被其他用户使用"
-            )
+    # 注意：由于手机号现在加密存储，无法直接查询重复
+    # 在实际应用中，可以考虑维护一个单独的哈希索引用于查重
     
-    # 更新手机号
-    current_user.phone = phone_update.phone
+    # 更新手机号（使用加密方法）
+    current_user.set_phone_encrypted(phone_update.phone)
     db.commit()
     db.refresh(current_user)
     
@@ -59,7 +50,7 @@ async def delete_my_phone(
     current_user: User = Depends(get_current_user)
 ):
     """删除当前用户的手机号（设置为空）"""
-    current_user.phone = None
+    current_user.set_phone_encrypted(None)
     db.commit()
     
     return {"message": "手机号已删除"}

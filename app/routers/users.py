@@ -26,7 +26,7 @@ async def create_user(
             db_user.hashed_password = get_password_hash(user.password)
             db_user.is_active = True
             db_user.user_type = user.user_type  # 按照管理员指定的权限设置
-            db_user.phone = user.phone  # 更新手机号
+            db_user.set_phone_encrypted(user.phone)  # 使用加密方法设置手机号
             db.commit()
             db.refresh(db_user)
             return db_user
@@ -36,9 +36,10 @@ async def create_user(
         username=user.username,
         hashed_password=hashed_password,
         user_type=user.user_type,  # 按照管理员指定的权限设置
-        is_active=True,
-        phone=user.phone  # 手机号
+        is_active=True
     )
+    # 使用加密方法设置手机号
+    db_user.set_phone_encrypted(user.phone)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -99,7 +100,7 @@ async def update_user(
         db_user.is_active = user_update.is_active
     
     if user_update.phone is not None:
-        db_user.phone = user_update.phone
+        db_user.set_phone_encrypted(user_update.phone)
     
     db.commit()
     db.refresh(db_user)
@@ -128,7 +129,7 @@ async def partial_update_user(
         db_user.is_active = user_update.is_active
     
     if user_update.phone is not None:
-        db_user.phone = user_update.phone
+        db_user.set_phone_encrypted(user_update.phone)
     
     db.commit()
     db.refresh(db_user)

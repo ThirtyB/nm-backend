@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Float, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Float, Text, JSON, LargeBinary
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.security.field_encryption import get_field_encryption_service
+from typing import Optional
 
 class User(Base):
     __tablename__ = "users"
@@ -11,9 +13,79 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     user_type = Column(String(20), default="user", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    phone = Column(String(20), index=True)  # 手机号字段，可以为空
+    phone = Column(String(20))  # 保留原字段用于向后兼容，建议设为 NULL
+    
+    # SM4-CBC + HMAC 加密字段
+    phone_encrypted = Column(LargeBinary)  # 加密后的手机号密文
+    phone_iv = Column(LargeBinary)         # CBC 初始化向量 (16字节)
+    phone_tag = Column(LargeBinary)        # HMAC-SHA256 认证标签 (32字节)
+    phone_alg = Column(String(20), default='SM4-CBC-HMAC')  # 加密算法标识
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True))
+    
+    @property
+    def phone_decrypted(self) -> Optional[str]:
+        """
+        获取解密后的手机号
+        
+        Returns:
+            解密后的手机号，如果未加密则返回 None
+        """
+        if self.phone_encrypted is None or self.phone_iv is None or self.phone_tag is None:
+            return None
+        
+        try:
+            encryption_service = get_field_encryption_service()
+            return encryption_service.decrypt_phone((
+                bytes(self.phone_encrypted),
+                bytes(self.phone_iv),
+                bytes(self.phone_tag)
+            ))
+        except Exception as e:
+            # 记录错误但不抛出异常，避免影响其他功能
+            print(f"解密手机号失败: {e}")
+            return None
+    
+    def set_phone_encrypted(self, phone: Optional[str]) -> None:
+        """
+        设置加密的手机号
+        
+        Args:
+            phone: 要加密的手机号，可以为 None
+        """
+        if phone is None or phone.strip() == "":
+            # 清空加密字段
+            self.phone_encrypted = None
+            self.phone_iv = None
+            self.phone_tag = None
+            self.phone = None
+            return
+        
+        try:
+            encryption_service = get_field_encryption_service()
+            encrypted_data = encryption_service.encrypt_phone(phone)
+            
+            if encrypted_data is not None:
+                ciphertext, iv, tag = encrypted_data
+                self.phone_encrypted = ciphertext
+                self.phone_iv = iv
+                self.phone_tag = tag
+                self.phone = None  # 清空明文字段
+            else:
+                # 加密失败或输入为空
+                self.phone_encrypted = None
+                self.phone_iv = None
+                self.phone_tag = None
+                self.phone = None
+                
+        except Exception as e:
+            # 加密失败时记录错误
+            print(f"加密手机号失败: {e}")
+            self.phone_encrypted = None
+            self.phone_iv = None
+            self.phone_tag = None
+            self.phone = None
 
 class NodeMonitorMetrics(Base):
     __tablename__ = "node_monitor_metrics"

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal, List, Dict
 from datetime import datetime
 
@@ -6,7 +6,7 @@ class UserBase(BaseModel):
     username: str
     user_type: Optional[Literal["admin", "user"]] = "user"
     is_active: bool = True
-    phone: Optional[str] = None  # 手机号，可以为空
+    phone: Optional[str] = None  # 手机号，可以为空（用于输入）
 
 class UserCreate(BaseModel):
     username: str
@@ -39,6 +39,30 @@ class UserResponse(UserBase):
     
     class Config:
         from_attributes = True
+    
+    @model_validator(mode='before')
+    @classmethod
+    def decrypt_phone(cls, data):
+        """自动处理加密字段解密"""
+        if hasattr(data, 'phone_decrypted'):
+            # 如果是ORM对象，使用解密后的手机号
+            if isinstance(data, dict):
+                # 如果已经是字典，检查是否有phone_decrypted字段
+                if 'phone_decrypted' in data:
+                    data['phone'] = data['phone_decrypted']
+            else:
+                # 将ORM对象转换为字典，并替换phone字段
+                result = {
+                    'id': data.id,
+                    'username': data.username,
+                    'user_type': data.user_type,
+                    'is_active': data.is_active,
+                    'phone': data.phone_decrypted,
+                    'created_at': data.created_at,
+                    'last_login': data.last_login
+                }
+                return result
+        return data
 
 class Token(BaseModel):
     access_token: str
@@ -68,6 +92,30 @@ class UserProfile(BaseModel):
     
     class Config:
         from_attributes = True
+    
+    @model_validator(mode='before')
+    @classmethod
+    def decrypt_phone(cls, data):
+        """自动处理加密字段解密"""
+        if hasattr(data, 'phone_decrypted'):
+            # 如果是ORM对象，使用解密后的手机号
+            if isinstance(data, dict):
+                # 如果已经是字典，检查是否有phone_decrypted字段
+                if 'phone_decrypted' in data:
+                    data['phone'] = data['phone_decrypted']
+            else:
+                # 将ORM对象转换为字典，并替换phone字段
+                result = {
+                    'id': data.id,
+                    'username': data.username,
+                    'user_type': data.user_type,
+                    'is_active': data.is_active,
+                    'phone': data.phone_decrypted,
+                    'created_at': data.created_at,
+                    'last_login': data.last_login
+                }
+                return result
+        return data
 
 # 节点监控相关schemas
 class NodeMetricsBase(BaseModel):
