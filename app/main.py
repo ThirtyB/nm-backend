@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import auth, users, node_monitor, alert_management, scoring, heartbeat, cache_management
+from app.routers import auth, users, node_monitor, alert_management, scoring, heartbeat, cache_management, user_profile
 from app.access_logger import set_client_ip, RequestLoggingMiddleware
 from app.heartbeat_checker import heartbeat_checker
 import asyncio
@@ -51,6 +51,7 @@ async def log_requests(request: Request, call_next):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(user_profile.router)
 app.include_router(node_monitor.router)
 app.include_router(alert_management.router)
 app.include_router(scoring.router)

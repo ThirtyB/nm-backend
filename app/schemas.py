@@ -6,6 +6,7 @@ class UserBase(BaseModel):
     username: str
     user_type: Optional[Literal["admin", "user"]] = "user"
     is_active: bool = True
+    phone: Optional[str] = None  # 手机号，可以为空
 
 class UserCreate(BaseModel):
     username: str
@@ -15,18 +16,21 @@ class AdminUserCreate(BaseModel):
     username: str
     password: str
     user_type: Literal["admin", "user"] = "user"
+    phone: Optional[str] = None  # 手机号，可以为空
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     user_type: Optional[Literal["admin", "user"]] = None
     is_active: Optional[bool] = None
+    phone: Optional[str] = None  # 手机号，可以为空
 
 class UserPartialUpdate(BaseModel):
     """部分更新用户信息，只更新提供的字段"""
     password: Optional[str] = None
     user_type: Optional[Literal["admin", "user"]] = None
     is_active: Optional[bool] = None
+    phone: Optional[str] = None  # 手机号，可以为空
 
 class UserResponse(UserBase):
     id: int
@@ -46,6 +50,24 @@ class TokenData(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+# 用户自己管理手机号的schemas
+class UserPhoneUpdate(BaseModel):
+    """用户更新自己的手机号"""
+    phone: Optional[str] = None
+
+class UserProfile(BaseModel):
+    """用户个人信息（不包含敏感信息）"""
+    id: int
+    username: str
+    user_type: str
+    is_active: bool
+    phone: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 # 节点监控相关schemas
 class NodeMetricsBase(BaseModel):

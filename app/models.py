@@ -11,6 +11,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     user_type = Column(String(20), default="user", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    phone = Column(String(20), index=True)  # 手机号字段，可以为空
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True))
 
