@@ -26,10 +26,10 @@ def calculate_memory_usage(mem_total: Optional[int], mem_free: Optional[int], me
     """计算内存使用率"""
     if mem_total is None or mem_total == 0:
         return None
-    used = (mem_total - mem_free - mem_buff - mem_cache) if mem_free is not None else None
-    if used is None:
+    if mem_free is None:
         return None
-    return round((used / mem_total) * 100, 2)
+    # 使用公式：1 - free/total
+    return round((1 - mem_free / mem_total) * 100, 2)
 
 def calculate_swap_usage(swap_total: Optional[int], swap_used: Optional[int]) -> Optional[float]:
     """计算Swap使用率"""
@@ -407,7 +407,7 @@ async def get_usage_top(
     - 同时返回每个top IP在时间段内的完整使用率时间序列（按时间排序）
     - 网络使用率 = net_rx_kbps + net_tx_kbps（单位：kbps）
     - CPU使用率 = cpu_usr + cpu_sys + cpu_iow
-    - 内存使用率 = (mem_total - mem_free - mem_buff - mem_cache) / mem_total * 100
+    - 内存使用率 = (1 - mem_free / mem_total) * 100
     - Swap使用率 = swap_used / swap_total * 100
     - 磁盘使用率直接使用disk_used_percent字段
     """

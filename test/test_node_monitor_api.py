@@ -216,7 +216,7 @@ def print_api_info():
     print()
     print("五维数据说明:")
     print("- CPU使用率: cpu_usr + cpu_sys + cpu_iow")
-    print("- 内存使用率: (mem_total - mem_free - mem_buff - mem_cache) / mem_total * 100")
+    print("- 内存使用率: (1 - mem_free / mem_total) * 100")
     print("- 磁盘使用率: disk_used_percent")
     print("- Swap使用率: swap_used / swap_total * 100")
     print("- 网络速率: net_rx_kbps + net_tx_kbps (负数已处理为0)")

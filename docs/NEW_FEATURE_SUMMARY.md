@@ -65,7 +65,7 @@
 | 维度 | 计算公式 | 单位 |
 |------|----------|------|
 | CPU | cpu_usr + cpu_sys + cpu_iow | % |
-| 内存 | (mem_total - mem_free - mem_buff - mem_cache) / mem_total * 100 | % |
+| 内存 | (1 - mem_free / mem_total) * 100 | % |
 | 磁盘 | disk_used_percent | % |
 | 网络 | net_rx_kbps + net_tx_kbps | kbps |
 | Swap | swap_used / swap_total * 100 | % |

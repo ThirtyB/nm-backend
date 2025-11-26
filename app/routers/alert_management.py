@@ -45,10 +45,9 @@ class AlertRuleEngine:
             derived["cpu_usage_rate"] = round(metrics.cpu_usr + metrics.cpu_sys + metrics.cpu_iow, 2)
         
         # 内存使用率
-        if metrics.mem_total is not None and metrics.mem_total > 0:
-            if metrics.mem_free is not None and metrics.mem_buff is not None and metrics.mem_cache is not None:
-                used = metrics.mem_total - metrics.mem_free - metrics.mem_buff - metrics.mem_cache
-                derived["memory_usage_rate"] = round((used / metrics.mem_total) * 100, 2)
+        if metrics.mem_total is not None and metrics.mem_total > 0 and metrics.mem_free is not None:
+            # 使用公式：1 - free/total
+            derived["memory_usage_rate"] = round((1 - metrics.mem_free / metrics.mem_total) * 100, 2)
         
         # Swap使用率
         if metrics.swap_total is not None and metrics.swap_total > 0 and metrics.swap_used is not None:

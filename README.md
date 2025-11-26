@@ -196,7 +196,7 @@ CPU使用率 = cpu_usr + cpu_sys + cpu_iow
 
 ### 内存使用率
 ```
-内存使用率 = (mem_total - mem_free - mem_buff - mem_cache) / mem_total * 100
+内存使用率 = (1 - mem_free / mem_total) * 100
 ```
 
 ### 磁盘使用率
