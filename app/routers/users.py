@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserResponse, UserUpdate, UserPartialUpdate, AdminUserCreate
 from app.auth import get_current_admin_user, get_password_hash
-from app.utils.phone_validation import check_phone_unique
+from app.utils.phone_validation import check_phone_unique, find_user_by_phone
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
 
@@ -23,30 +23,28 @@ async def create_user(
                 detail="Username already registered"
             )
         else:
-            # 用户存在但已停用，重新激活并更新密码，按照管理员指定的权限设置
-            # 检查手机号唯一性（如果提供了新手机号）
-            if user.phone is not None and user.phone.strip() != "":
-                if not check_phone_unique(db, user.phone, exclude_user_id=db_user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Phone number already registered"
-                    )
-            
-            db_user.hashed_password = get_password_hash(user.password)
-            db_user.is_active = True
-            db_user.user_type = user.user_type  # 按照管理员指定的权限设置
-            db_user.set_phone_encrypted(user.phone)  # 使用加密方法设置手机号
-            db.commit()
-            db.refresh(db_user)
-            return db_user
-    
-    # 检查手机号唯一性
-    if user.phone is not None and user.phone.strip() != "":
-        if not check_phone_unique(db, user.phone):
+            # 用户名被禁用用户占用，不允许创建
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already registered"
+                detail="Username is disabled and cannot be registered"
             )
+    
+    # 检查手机号唯一性和是否被禁用用户使用
+    if user.phone is not None and user.phone.strip() != "":
+        # 查找使用该手机号的用户
+        phone_user = find_user_by_phone(db, user.phone)
+        if phone_user:
+            if phone_user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number already registered"
+                )
+            else:
+                # 手机号被禁用用户占用，不允许创建
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number is disabled and cannot be registered"
+                )
     
     hashed_password = get_password_hash(user.password)
     db_user = User(
@@ -205,3 +203,26 @@ async def activate_user(
     db.commit()
     
     return {"message": "User activated successfully"}
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """删除用户"""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if db_user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete yourself"
+        )
+    
+    # 删除用户
+    db.delete(db_user)
+    db.commit()
+    
+    return {"message": "User deleted successfully"}

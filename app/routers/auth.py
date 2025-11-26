@@ -22,30 +22,28 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
                 detail="Username already registered"
             )
         else:
-            # 用户存在但已停用，重新激活并更新密码，强制设置为普通用户
-            # 检查手机号唯一性（如果提供了新手机号）
-            if user_data.phone is not None and user_data.phone.strip() != "":
-                if not check_phone_unique(db, user_data.phone, exclude_user_id=existing_user.id):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Phone number already registered"
-                    )
-            
-            existing_user.hashed_password = get_password_hash(user_data.password)
-            existing_user.is_active = True
-            existing_user.user_type = "user"  # 强制为普通用户
-            existing_user.set_phone_encrypted(user_data.phone)  # 更新加密的手机号
-            db.commit()
-            db.refresh(existing_user)
-            return existing_user
-    
-    # 检查手机号唯一性
-    if user_data.phone is not None and user_data.phone.strip() != "":
-        if not check_phone_unique(db, user_data.phone):
+            # 用户名被禁用用户占用，不允许注册
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already registered"
+                detail="Username is disabled and cannot be registered"
             )
+    
+    # 检查手机号唯一性和是否被禁用用户使用
+    if user_data.phone is not None and user_data.phone.strip() != "":
+        # 查找使用该手机号的用户
+        phone_user = find_user_by_phone(db, user_data.phone)
+        if phone_user:
+            if phone_user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number already registered"
+                )
+            else:
+                # 手机号被禁用用户占用，不允许注册
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone number is disabled and cannot be registered"
+                )
     
     # 创建新用户
     hashed_password = get_password_hash(user_data.password)
@@ -75,10 +73,17 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     if not user:
         user = find_user_by_phone(db, user_data.username)
     
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is disabled",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
